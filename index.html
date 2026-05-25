@@ -1,0 +1,1496 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Livros são Portas</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,800;1,400;1,600&family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    :root {
+      --cream:        #f5f0e8;
+      --cream-2:      #ede5d4;
+      --surface:      #fdfaf5;
+      --ink:          #1c1408;
+      --ink-2:        #3a2e1a;
+      --ink-muted:    #6b5c42;
+      --ink-faint:    #a09070;
+      --forest:       #2b5016;
+      --forest-mid:   #3d6b18;
+      --forest-light: #559a28;
+      --forest-pale:  #eaf2df;
+      --forest-pale2: #d4e8c0;
+      --cognac:       #7a3f10;
+      --cognac-light: #c4743a;
+      --cognac-pale:  #f5e8dc;
+      --grade11-pale: #deeafc;
+      --grade12-pale: #ead5fc;
+      --grade11-dark: #1c3054;
+      --grade12-dark: #3b1060;
+      --red:          #b71c1c;
+      --red-pale:     #fde8e8;
+      --border:       #d8cdb8;
+      --border-light: #e8e0d0;
+      --shadow-xs:    0 1px 3px rgba(28,20,8,.06);
+      --shadow-sm:    0 2px 8px rgba(28,20,8,.09);
+      --shadow-md:    0 4px 20px rgba(28,20,8,.12);
+      --r:            8px;
+      --r-lg:         12px;
+      --r-xl:         20px;
+      --font-d:       'Playfair Display', Georgia, serif;
+      --font-b:       'Lora', Georgia, serif;
+      --font-m:       'DM Mono', 'Courier New', monospace;
+    }
+
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--cream);
+      color: var(--ink);
+      font-family: var(--font-b);
+      font-size: 15px;
+      line-height: 1.65;
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    #root { min-height: 100vh; }
+
+    input, textarea, select, button { font-family: var(--font-b); font-size: 14px; }
+    ::placeholder { color: var(--ink-faint); }
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: var(--cream-2); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes shimmer {
+      from { background-position: -600px 0; }
+      to   { background-position: 600px 0; }
+    }
+
+    .fade-in { animation: fadeUp .32s cubic-bezier(.22,.68,0,1.2) forwards; }
+    .spin-it { animation: spin .8s linear infinite; }
+    .skeleton {
+      background: linear-gradient(90deg, var(--cream-2) 25%, var(--border-light) 50%, var(--cream-2) 75%);
+      background-size: 800px 100%;
+      animation: shimmer 1.5s ease-in-out infinite;
+      border-radius: var(--r);
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel" data-presets="react">
+    const { useState, useEffect, useMemo, useRef } = React;
+
+    /* ── Firebase ─────────────────────────────────────────── */
+    firebase.initializeApp({
+      apiKey:            "AIzaSyBTmPVFSFtDvnBuXy-cx_ogB7XodqCogkM",
+      authDomain:        "biblioteca-comunitaria-a93f9.firebaseapp.com",
+      projectId:         "biblioteca-comunitaria-a93f9",
+      storageBucket:     "biblioteca-comunitaria-a93f9.firebasestorage.app",
+      messagingSenderId: "603000168473",
+      appId:             "1:603000168473:web:514caec661c58d674dca88"
+    });
+    const db = firebase.firestore();
+
+    const saveDoc = (docId, items) =>
+      db.collection("livros").doc(docId).set({ items });
+
+    const subscribe = (docId, cb) =>
+      db.collection("livros").doc(docId).onSnapshot(snap =>
+        cb(snap.exists ? (snap.data().items || []) : [])
+      );
+
+    /* ── Constants ────────────────────────────────────────── */
+    const COORD_PASS = "livros2027";
+    const GOAL = 50;
+    const GRADES = ["10º Ano", "11º Ano", "12º Ano"];
+
+
+    /* ── Helpers ──────────────────────────────────────────── */
+    const genId = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
+
+    const fmtDate = d => {
+      if (!d) return "";
+      return new Date(d + "T12:00:00")
+        .toLocaleDateString("pt-AO", { day:"2-digit", month:"short", year:"numeric" });
+    };
+
+    /* ── Primitives ───────────────────────────────────────── */
+
+    function Spinner({ size = 20 }) {
+      return (
+        <div className="spin-it" style={{
+          width: size, height: size, borderRadius: "50%",
+          border: `2px solid var(--forest-pale)`,
+          borderTopColor: "var(--forest)",
+          display: "inline-block", flexShrink: 0
+        }} />
+      );
+    }
+
+    function Avatar({ name, size = 44 }) {
+      const initials = name.split(" ").filter(Boolean)
+        .map(w => w[0]).slice(0, 2).join("").toUpperCase();
+      const palette = ["#2b5016","#7a3f10","#1c3054","#3b1060","#004d40","#4e342e","#37474f"];
+      const c = (name.charCodeAt(0) + (name.charCodeAt(1) || 0)) % palette.length;
+      return (
+        <div style={{
+          width: size, height: size, borderRadius: "50%",
+          background: palette[c], flexShrink: 0,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          color: "#fff", fontWeight: 700,
+          fontSize: Math.round(size * .36),
+          fontFamily: "var(--font-d)", letterSpacing: "0.01em"
+        }}>
+          {initials}
+        </div>
+      );
+    }
+
+    function GradeBadge({ grade }) {
+      const palettes = {
+        "10º Ano": { bg:"#fff0d4", color:"#7a4f00" },
+        "11º Ano": { bg:"var(--grade11-pale)", color:"var(--grade11-dark)" },
+        "12º Ano": { bg:"var(--grade12-pale)", color:"var(--grade12-dark)" },
+      };
+      const p = palettes[grade] || palettes["11º Ano"];
+      return (
+        <span style={{
+          fontSize: 11, fontWeight: 500, padding: "2px 9px",
+          borderRadius: 99, background: p.bg, color: p.color,
+          fontFamily: "var(--font-m)", letterSpacing: "0.03em"
+        }}>
+          {grade}
+        </span>
+      );
+    }
+
+    function MiniProgress({ pct }) {
+      const s = Math.min(pct, 100);
+      return (
+        <div style={{
+          width: "100%", height: 4, background: "var(--border-light)",
+          borderRadius: 99, overflow: "hidden"
+        }}>
+          <div style={{
+            width: `${s}%`, height: "100%",
+            background: s >= 100 ? "var(--forest-light)" : "var(--forest)",
+            borderRadius: 99, transition: "width .6s ease"
+          }} />
+        </div>
+      );
+    }
+
+    function BigProgress({ hours, size = 140 }) {
+      const pct = Math.min((hours / GOAL) * 100, 100);
+      const sw = 10, r = (size - sw) / 2;
+      const circ = 2 * Math.PI * r;
+      const dash = (pct / 100) * circ;
+      const done = pct >= 100;
+      return (
+        <div style={{ position:"relative", width:size, height:size, flexShrink:0 }}>
+          <svg width={size} height={size} style={{ transform:"rotate(-90deg)" }}>
+            <circle cx={size/2} cy={size/2} r={r}
+              fill="none" stroke="var(--border-light)" strokeWidth={sw} />
+            <circle cx={size/2} cy={size/2} r={r}
+              fill="none"
+              stroke={done ? "var(--forest-light)" : "var(--forest)"}
+              strokeWidth={sw}
+              strokeDasharray={`${dash} ${circ}`}
+              strokeLinecap="round"
+              style={{ transition:"stroke-dasharray .8s ease" }} />
+          </svg>
+          <div style={{
+            position:"absolute", inset:0,
+            display:"flex", flexDirection:"column",
+            alignItems:"center", justifyContent:"center"
+          }}>
+            <span style={{
+              fontSize:26, fontWeight:800, fontFamily:"var(--font-d)",
+              color: done ? "var(--forest-light)" : "var(--forest)", lineHeight:1
+            }}>{hours}h</span>
+            <span style={{
+              fontSize:10, color:"var(--ink-muted)",
+              fontFamily:"var(--font-m)", marginTop:3
+            }}>de {GOAL}h</span>
+          </div>
+        </div>
+      );
+    }
+
+    function Card({ children, style }) {
+      return (
+        <div style={{
+          background:"var(--surface)",
+          border:"1px solid var(--border-light)",
+          borderRadius:"var(--r-lg)",
+          padding:20,
+          boxShadow:"var(--shadow-sm)",
+          ...style
+        }}>
+          {children}
+        </div>
+      );
+    }
+
+    function Label({ children }) {
+      return (
+        <label style={{
+          display:"block", fontSize:11,
+          fontFamily:"var(--font-m)", fontWeight:500,
+          color:"var(--ink-muted)", letterSpacing:"0.07em",
+          textTransform:"uppercase", marginBottom:7
+        }}>{children}</label>
+      );
+    }
+
+    function Field({ label, error, children }) {
+      return (
+        <div>
+          {label && <Label>{label}</Label>}
+          {children}
+          {error && (
+            <p style={{
+              color:"var(--red)", fontSize:12, marginTop:5,
+              fontFamily:"var(--font-m)"
+            }}>{error}</p>
+          )}
+        </div>
+      );
+    }
+
+    const inputStyle = (err) => ({
+      width:"100%", padding:"10px 14px",
+      background:"#fff",
+      border:`1px solid ${err ? "var(--red)" : "var(--border)"}`,
+      borderRadius:"var(--r)", color:"var(--ink)",
+      fontSize:14, outline:"none",
+      transition:"border-color .2s"
+    });
+
+    function Btn({ variant="primary", loading, children, ...props }) {
+      const map = {
+        primary:   { bg:"var(--forest)",    color:"#fff",              border:"none" },
+        secondary: { bg:"transparent",      color:"var(--forest)",     border:"1px solid var(--forest)" },
+        ghost:     { bg:"transparent",      color:"var(--ink-muted)",  border:"1px solid var(--border)" },
+        danger:    { bg:"var(--red)",        color:"#fff",              border:"none" },
+      };
+      const v = map[variant] || map.primary;
+      return (
+        <button {...props} style={{
+          padding:"10px 20px", borderRadius:"var(--r)",
+          fontFamily:"var(--font-b)", fontSize:14, fontWeight:600,
+          cursor: props.disabled ? "not-allowed" : "pointer",
+          border: v.border, background: v.bg, color: v.color,
+          display:"flex", alignItems:"center", justifyContent:"center",
+          gap:8, transition:"opacity .15s, transform .1s",
+          opacity: props.disabled ? .55 : 1,
+          ...props.style
+        }}>
+          {loading ? <Spinner size={15} /> : children}
+        </button>
+      );
+    }
+
+    function BackBtn({ onClick }) {
+      return (
+        <button onClick={onClick} style={{
+          background:"none", border:"none", cursor:"pointer",
+          color:"var(--ink-muted)", fontFamily:"var(--font-m)",
+          fontSize:12, letterSpacing:"0.05em", padding:"4px 0",
+          display:"flex", alignItems:"center", gap:6, marginBottom:24
+        }}>
+          ← Voltar
+        </button>
+      );
+    }
+
+    function Alert({ type, children }) {
+      const map = {
+        error:   { bg:"var(--red-pale)",   color:"var(--red)" },
+        success: { bg:"var(--forest-pale)",color:"var(--forest)" },
+      };
+      const s = map[type] || map.error;
+      return (
+        <p style={{
+          color:s.color, fontSize:13, padding:"9px 14px",
+          background:s.bg, borderRadius:"var(--r)",
+          fontFamily:"var(--font-m)", lineHeight:1.5
+        }}>{children}</p>
+      );
+    }
+
+    function ConfirmModal({ message, detail, onConfirm, onCancel }) {
+      return (
+        <div style={{
+          position:"fixed", inset:0, zIndex:1000,
+          background:"rgba(28,20,8,.65)", backdropFilter:"blur(4px)",
+          display:"flex", alignItems:"center", justifyContent:"center",
+          padding:"0 24px"
+        }}>
+          <Card style={{ maxWidth:340, width:"100%", textAlign:"center" }} className="fade-in">
+            <div style={{ marginBottom:14 }}>
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none">
+                <path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"
+                  stroke="var(--red)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <h3 style={{ fontFamily:"var(--font-d)", fontSize:18, color:"var(--ink)", marginBottom:8 }}>
+              {message}
+            </h3>
+            {detail && <p style={{ color:"var(--ink-muted)", fontSize:13, marginBottom:20 }}>{detail}</p>}
+            <div style={{ display:"flex", gap:10, marginTop:20 }}>
+              <Btn variant="ghost" onClick={onCancel} style={{ flex:1 }}>Cancelar</Btn>
+              <Btn variant="danger" onClick={onConfirm} style={{ flex:1 }}>Apagar</Btn>
+            </div>
+          </Card>
+        </div>
+      );
+    }
+
+    function GradeFilter({ value, onChange }) {
+      return (
+        <div style={{ display:"flex", gap:7 }}>
+          {["Todos", ...GRADES].map(g => {
+            const active = (g === "Todos" && !value) || g === value;
+            return (
+              <button key={g} onClick={() => onChange(g === "Todos" ? "" : g)} style={{
+                padding:"5px 13px", borderRadius:99,
+                border:`1px solid ${active ? "var(--forest)" : "var(--border)"}`,
+                background: active ? "var(--forest)" : "transparent",
+                color: active ? "#fff" : "var(--ink-muted)",
+                cursor:"pointer", fontSize:12,
+                fontFamily:"var(--font-m)", fontWeight:500,
+                transition:"all .15s"
+              }}>{g}</button>
+            );
+          })}
+        </div>
+      );
+    }
+
+    /* ── Screens ──────────────────────────────────────────── */
+
+    function HomeScreen({ onCoord, onVolunteer }) {
+      return (
+        <div style={{
+          minHeight:"100vh", display:"flex",
+          flexDirection:"column", alignItems:"center", justifyContent:"center",
+          padding:"40px 24px", background:"var(--cream)", position:"relative", overflow:"hidden"
+        }}>
+          {/* Ambient background glows */}
+          <div style={{
+            position:"absolute", inset:0, pointerEvents:"none",
+            background:`
+              radial-gradient(ellipse 70% 60% at 20% 15%, rgba(43,80,22,.07) 0%, transparent 70%),
+              radial-gradient(ellipse 60% 50% at 80% 85%, rgba(122,63,16,.07) 0%, transparent 70%)
+            `
+          }} />
+
+          {/* Giant decorative "50" */}
+          <div aria-hidden="true" style={{
+            position:"absolute", top:"50%", left:"50%",
+            transform:"translate(-50%, -52%)",
+            fontFamily:"var(--font-d)", fontWeight:800,
+            fontSize:"clamp(180px, 40vw, 380px)",
+            color:"var(--forest)", opacity:.035,
+            userSelect:"none", pointerEvents:"none", lineHeight:1
+          }}>50</div>
+
+          <div className="fade-in" style={{ position:"relative", textAlign:"center", maxWidth:360, width:"100%" }}>
+
+            {/* Book icon mark */}
+            <div style={{
+              width:60, height:60, borderRadius:"50%",
+              background:"var(--forest)", margin:"0 auto 22px",
+              display:"flex", alignItems:"center", justifyContent:"center",
+              boxShadow:"0 6px 24px rgba(43,80,22,.35)"
+            }}>
+              <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                <path d="M6 4h9a3 3 0 013 3v14l-6-3.5L6 21V4z" fill="white" opacity=".95"/>
+                <path d="M12 4h6a2 2 0 012 2v16l-4.5-2.8L12 22V4z" fill="white" opacity=".45"/>
+              </svg>
+            </div>
+
+            <p style={{
+              fontFamily:"var(--font-m)", fontSize:10, color:"var(--ink-muted)",
+              letterSpacing:"0.18em", textTransform:"uppercase", marginBottom:10
+            }}>Registo de horas comunitárias</p>
+
+            <h1 style={{
+              fontFamily:"var(--font-d)", fontSize:"clamp(32px,8vw,42px)",
+              fontWeight:700, color:"var(--ink)", lineHeight:1.15, marginBottom:6
+            }}>
+              Livros são<br /><em style={{ color:"var(--forest)", fontStyle:"italic" }}>Portas</em>
+            </h1>
+
+            {/* Ornamental divider */}
+            <div style={{
+              display:"flex", alignItems:"center", gap:12,
+              margin:"18px auto", maxWidth:200
+            }}>
+              <div style={{ flex:1, height:1, background:"var(--border)" }} />
+              <svg width="12" height="12" viewBox="0 0 12 12">
+                <path d="M6 0l1.5 4.5L12 6 7.5 7.5 6 12 4.5 7.5 0 6l4.5-1.5z"
+                  fill="var(--cognac-light)" opacity=".6"/>
+              </svg>
+              <div style={{ flex:1, height:1, background:"var(--border)" }} />
+            </div>
+
+            <p style={{
+              fontSize:14, color:"var(--ink-muted)",
+              marginBottom:36, fontStyle:"italic"
+            }}>
+              Meta: <strong style={{ color:"var(--ink-2)", fontStyle:"normal" }}>{GOAL} horas</strong> de leitura comunitária
+            </p>
+
+            <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+              <Btn variant="primary" onClick={onCoord}
+                style={{ width:"100%", padding:"14px", fontSize:15 }}>
+                Coordenador
+              </Btn>
+              <Btn variant="secondary" onClick={onVolunteer}
+                style={{ width:"100%", padding:"14px", fontSize:15 }}>
+                Ver o meu perfil
+              </Btn>
+            </div>
+
+            <p style={{
+              marginTop:30, color:"var(--ink-faint)",
+              fontSize:11, fontFamily:"var(--font-m)"
+            }}>
+              Dados partilhados em tempo real
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    function CoordLoginScreen({ onSuccess, onBack }) {
+      const [pass, setPass] = useState("");
+      const [error, setError] = useState("");
+      const [loading, setLoading] = useState(false);
+      const ref = useRef(null);
+
+      useEffect(() => { ref.current?.focus(); }, []);
+
+      const handleLogin = async () => {
+        if (!pass) return setError("Introduz o código de acesso.");
+        setLoading(true);
+        await new Promise(r => setTimeout(r, 380));
+        if (pass === COORD_PASS) {
+          onSuccess();
+        } else {
+          setError("Código incorrecto. Tenta de novo.");
+        }
+        setLoading(false);
+      };
+
+      return (
+        <div style={{
+          minHeight:"100vh", display:"flex",
+          alignItems:"center", justifyContent:"center",
+          padding:"40px 24px", background:"var(--cream)"
+        }}>
+          <div className="fade-in" style={{ width:"100%", maxWidth:380 }}>
+            <BackBtn onClick={onBack} />
+            <h2 style={{
+              fontFamily:"var(--font-d)", fontSize:30, fontWeight:700,
+              color:"var(--ink)", marginBottom:6
+            }}>Acesso Coordenador</h2>
+            <p style={{ color:"var(--ink-muted)", fontSize:14, marginBottom:28 }}>
+              Introduz o código de acesso para continuar.
+            </p>
+            <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+              <Field label="Código de acesso" error={error}>
+                <input
+                  ref={ref}
+                  type="password"
+                  value={pass}
+                  placeholder="••••••••"
+                  style={inputStyle(!!error)}
+                  onChange={e => { setPass(e.target.value); setError(""); }}
+                  onKeyDown={e => e.key === "Enter" && handleLogin()}
+                />
+              </Field>
+              <Btn variant="primary" onClick={handleLogin} loading={loading}
+                style={{ width:"100%", padding:"12px", fontSize:15 }}>
+                Entrar
+              </Btn>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function VolunteerLoginScreen({ volunteers, onSuccess, onBack }) {
+      const [query, setQuery] = useState("");
+      const [grade, setGrade] = useState("");
+      const [error, setError] = useState("");
+
+      const matches = useMemo(() => {
+        const q = query.trim().toLowerCase();
+        if (!q) return [];
+        return volunteers.filter(v =>
+          v.name.toLowerCase().includes(q) && (!grade || v.grade === grade)
+        );
+      }, [query, grade, volunteers]);
+
+      return (
+        <div style={{
+          minHeight:"100vh", display:"flex",
+          alignItems:"center", justifyContent:"center",
+          padding:"40px 24px", background:"var(--cream)"
+        }}>
+          <div className="fade-in" style={{ width:"100%", maxWidth:420 }}>
+            <BackBtn onClick={onBack} />
+            <h2 style={{
+              fontFamily:"var(--font-d)", fontSize:30, fontWeight:700, marginBottom:6
+            }}>O meu perfil</h2>
+            <p style={{ color:"var(--ink-muted)", fontSize:14, marginBottom:28 }}>
+              Pesquisa o teu nome para consultar as tuas horas.
+            </p>
+            <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+              <Field label="Ano">
+                <GradeFilter value={grade} onChange={setGrade} />
+              </Field>
+              <Field label="Nome" error={error}>
+                <input
+                  type="text"
+                  value={query}
+                  placeholder="Pesquisa pelo teu nome..."
+                  autoFocus
+                  style={inputStyle(!!error)}
+                  onChange={e => { setQuery(e.target.value); setError(""); }}
+                />
+              </Field>
+
+              {query.trim() && (
+                <div style={{
+                  background:"#fff", border:"1px solid var(--border)",
+                  borderRadius:"var(--r)", overflow:"hidden",
+                  boxShadow:"var(--shadow-sm)"
+                }}>
+                  {matches.length === 0 ? (
+                    <p style={{
+                      padding:"18px 16px", textAlign:"center",
+                      color:"var(--ink-muted)", fontSize:13, fontStyle:"italic"
+                    }}>Nenhum resultado encontrado</p>
+                  ) : matches.slice(0, 8).map((v, i) => (
+                    <button key={v.id} onClick={() => onSuccess(v)} style={{
+                      width:"100%", padding:"12px 16px",
+                      display:"flex", alignItems:"center", gap:12,
+                      border:"none",
+                      borderTop: i > 0 ? "1px solid var(--border-light)" : "none",
+                      background:"none", cursor:"pointer", textAlign:"left",
+                      transition:"background .12s"
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = "var(--forest-pale)"}
+                    onMouseLeave={e => e.currentTarget.style.background = "none"}>
+                      <Avatar name={v.name} size={38} />
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontWeight:600, fontSize:14, color:"var(--ink)" }}>{v.name}</div>
+                        <div style={{ fontSize:12, color:"var(--ink-muted)", fontFamily:"var(--font-m)", marginTop:1 }}>
+                          {v.program || "—"}
+                        </div>
+                      </div>
+                      <GradeBadge grade={v.grade} />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    /* ── Coordinator Dashboard ────────────────────────────── */
+
+    function VolunteerCard({ v, sessions }) {
+      const [open, setOpen] = React.useState(false);
+      const mine = sessions
+        .filter(s => s.volunteerId === v.id)
+        .sort((a, b) => new Date(b.date) - new Date(a.date));
+      return (
+        <Card style={{ padding:0, overflow:"hidden" }}>
+          <div
+            onClick={() => setOpen(o => !o)}
+            style={{ padding:"14px 16px", cursor:"pointer", display:"flex", alignItems:"center", gap:12 }}
+          >
+            <Avatar name={v.name} size={42} />
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{
+                display:"flex", alignItems:"baseline",
+                justifyContent:"space-between", gap:8, marginBottom:6
+              }}>
+                <span style={{ fontWeight:600, fontSize:14, color:"var(--ink)" }}>{v.name}</span>
+                <span style={{
+                  fontFamily:"var(--font-m)", fontSize:12, flexShrink:0,
+                  color: v.pct >= 100 ? "var(--forest-light)" : "var(--ink-muted)",
+                  fontWeight: v.pct >= 100 ? 600 : 400
+                }}>{v.hours}h / {GOAL}h</span>
+              </div>
+              <MiniProgress pct={v.pct} />
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:6 }}>
+                <GradeBadge grade={v.grade} />
+                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                  {v.program && <span style={{ fontSize:11, color:"var(--ink-faint)", fontFamily:"var(--font-m)" }}>{v.program}</span>}
+                  <span style={{ fontSize:10, color:"var(--ink-faint)", fontFamily:"var(--font-m)" }}>
+                    {open ? "▲" : "▼"}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+          {open && (
+            <div style={{ borderTop:"1px solid var(--border-light)", padding:"14px 16px", background:"var(--cream)" }}>
+              <p style={{ fontFamily:"var(--font-m)", fontSize:10, color:"var(--ink-muted)", letterSpacing:"0.07em", textTransform:"uppercase", marginBottom:10 }}>
+                Historial de sessões ({mine.length})
+              </p>
+              {mine.length === 0 ? (
+                <p style={{ fontSize:13, color:"var(--ink-muted)", fontStyle:"italic" }}>Nenhuma sessão registada.</p>
+              ) : mine.map(s => (
+                <div key={s.id} style={{
+                  display:"flex", justifyContent:"space-between", alignItems:"flex-start",
+                  padding:"10px 0", borderBottom:"1px solid var(--border-light)",
+                  gap:12
+                }}>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:13, fontWeight:600, color:"var(--ink)", marginBottom:2 }}>{s.activity || "—"}</div>
+                    <div style={{ fontSize:11, color:"var(--ink-muted)", fontFamily:"var(--font-m)" }}>{fmtDate(s.date)}</div>
+                    {s.notes && <p style={{ fontSize:12, color:"var(--ink-muted)", marginTop:4, fontStyle:"italic" }}>{s.notes}</p>}
+                  </div>
+                  <span style={{ fontFamily:"var(--font-d)", fontSize:17, fontWeight:700, color:"var(--forest)", flexShrink:0 }}>{s.hours}h</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      );
+    }
+
+
+    /* ── Volunteer Detail Modal ───────────────────────────── */
+    function DetailModal({ volunteer, sessions, onClose }) {
+      const mine = sessions
+        .filter(s => s.volunteerId === volunteer.id)
+        .sort((a, b) => new Date(b.date) - new Date(a.date));
+      const hours = mine.reduce((a, b) => a + (b.hours || 0), 0);
+      const pct   = Math.min((hours / GOAL) * 100, 100);
+
+      return (
+        <div onClick={onClose} style={{
+          position:"fixed", inset:0, zIndex:500,
+          background:"rgba(28,20,8,.6)", backdropFilter:"blur(4px)",
+          display:"flex", alignItems:"flex-end", justifyContent:"center",
+          padding:"0"
+        }}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background:"var(--surface)",
+            borderRadius:"20px 20px 0 0",
+            width:"100%", maxWidth:640,
+            maxHeight:"85vh", display:"flex", flexDirection:"column",
+            boxShadow:"0 -8px 40px rgba(28,20,8,.2)"
+          }}>
+            {/* Header */}
+            <div style={{
+              padding:"20px 20px 16px",
+              borderBottom:"1px solid var(--border-light)",
+              display:"flex", alignItems:"center", gap:14, flexShrink:0
+            }}>
+              <Avatar name={volunteer.name} size={48} />
+              <div style={{ flex:1, minWidth:0 }}>
+                <h3 style={{
+                  fontFamily:"var(--font-d)", fontSize:20, fontWeight:700,
+                  color:"var(--ink)", margin:0, lineHeight:1.2
+                }}>{volunteer.name}</h3>
+                <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:6 }}>
+                  <GradeBadge grade={volunteer.grade} />
+                  <span style={{ fontSize:12, color:"var(--ink-muted)", fontFamily:"var(--font-m)" }}>
+                    {volunteer.program || "—"}
+                  </span>
+                </div>
+              </div>
+              <button onClick={onClose} style={{
+                background:"var(--cream-2)", border:"none", cursor:"pointer",
+                width:32, height:32, borderRadius:"50%",
+                display:"flex", alignItems:"center", justifyContent:"center",
+                fontSize:18, color:"var(--ink-muted)", flexShrink:0
+              }}>×</button>
+            </div>
+
+            {/* Progress bar */}
+            <div style={{ padding:"14px 20px", borderBottom:"1px solid var(--border-light)", flexShrink:0 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:8 }}>
+                <span style={{ fontSize:13, fontWeight:600, color:"var(--ink)" }}>{hours}h completadas</span>
+                <span style={{
+                  fontSize:13, fontFamily:"var(--font-m)",
+                  color: pct >= 100 ? "var(--forest-light)" : "var(--ink-muted)",
+                  fontWeight: pct >= 100 ? 600 : 400
+                }}>{Math.round(pct)}% da meta</span>
+              </div>
+              <MiniProgress pct={pct} />
+            </div>
+
+            {/* Session list */}
+            <div style={{ overflowY:"auto", padding:"16px 20px 32px", flex:1 }}>
+              <p style={{
+                fontFamily:"var(--font-m)", fontSize:10, color:"var(--ink-muted)",
+                letterSpacing:"0.07em", textTransform:"uppercase", marginBottom:12
+              }}>
+                Historial de sessões ({mine.length})
+              </p>
+
+              {mine.length === 0 ? (
+                <p style={{ color:"var(--ink-muted)", fontStyle:"italic", fontSize:14, textAlign:"center", padding:"32px 0" }}>
+                  Nenhuma sessão registada ainda.
+                </p>
+              ) : mine.map((s, i) => (
+                <div key={s.id} style={{
+                  padding:"14px 0",
+                  borderBottom: i < mine.length - 1 ? "1px solid var(--border-light)" : "none",
+                  display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:12
+                }}>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontWeight:600, fontSize:14, color:"var(--ink)", marginBottom:4 }}>
+                      {s.activity || "—"}
+                    </div>
+                    <div style={{ fontSize:12, color:"var(--ink-muted)", fontFamily:"var(--font-m)" }}>
+                      {fmtDate(s.date)}
+                    </div>
+                    {s.notes && (
+                      <p style={{ fontSize:13, color:"var(--ink-muted)", marginTop:6, fontStyle:"italic" }}>
+                        {s.notes}
+                      </p>
+                    )}
+                  </div>
+                  <span style={{
+                    fontFamily:"var(--font-d)", fontSize:20, fontWeight:700,
+                    color:"var(--forest)", flexShrink:0
+                  }}>{s.hours}h</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function OverviewTab({ volunteers, sessions }) {
+      const [gradeFilter, setGradeFilter] = useState("");
+      const [selectedVol, setSelectedVol] = useState(null);
+      const totalHours = sessions.reduce((s, x) => s + (x.hours || 0), 0);
+
+      const filtered = useMemo(() =>
+        gradeFilter ? volunteers.filter(v => v.grade === gradeFilter) : volunteers
+      , [volunteers, gradeFilter]);
+
+      const withHours = filtered.map(v => {
+        const hours = sessions
+          .filter(s => s.volunteerId === v.id)
+          .reduce((a, b) => a + (b.hours || 0), 0);
+        return { ...v, hours, pct: Math.min((hours / GOAL) * 100, 100) };
+      }).sort((a, b) => b.hours - a.hours);
+
+      return (
+        <div className="fade-in">
+          {/* Stat cards */}
+          <div style={{
+            display:"grid", gridTemplateColumns:"repeat(3,1fr)",
+            gap:12, marginBottom:24
+          }}>
+            {[
+              { label:"Voluntários", val:volunteers.length, unit:"" },
+              { label:"Horas totais", val:totalHours, unit:"h" },
+              { label:"Sessões",      val:sessions.length, unit:"" },
+            ].map(s => (
+              <Card key={s.label} style={{ textAlign:"center", padding:"16px 10px" }}>
+                <div style={{
+                  fontSize:26, fontWeight:800, fontFamily:"var(--font-d)",
+                  color:"var(--forest)", lineHeight:1
+                }}>
+                  {s.val}<span style={{ fontSize:14 }}>{s.unit}</span>
+                </div>
+                <div style={{
+                  fontSize:10, color:"var(--ink-muted)", fontFamily:"var(--font-m)",
+                  letterSpacing:"0.07em", textTransform:"uppercase", marginTop:5
+                }}>
+                  {s.label}
+                </div>
+              </Card>
+            ))}
+          </div>
+
+          <div style={{ marginBottom:14 }}>
+            <GradeFilter value={gradeFilter} onChange={setGradeFilter} />
+          </div>
+
+          {withHours.length === 0 ? (
+            <Card style={{ textAlign:"center", padding:"48px 24px" }}>
+              <p style={{ color:"var(--ink-muted)", fontStyle:"italic" }}>
+                Nenhum voluntário inscrito ainda.
+              </p>
+            </Card>
+          ) : (
+            <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+              {withHours.map(v => (
+                <Card key={v.id}
+                  onClick={() => setSelectedVol(v)}
+                  style={{ padding:"14px 16px", cursor:"pointer", transition:"box-shadow .15s" }}
+                  onMouseEnter={e => e.currentTarget.style.boxShadow="0 4px 20px rgba(28,20,8,.15)"}
+                  onMouseLeave={e => e.currentTarget.style.boxShadow="var(--shadow-sm)"}
+                >
+                  <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                    <Avatar name={v.name} size={42} />
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{
+                        display:"flex", alignItems:"baseline",
+                        justifyContent:"space-between", gap:8, marginBottom:6
+                      }}>
+                        <span style={{ fontWeight:600, fontSize:14, color:"var(--ink)" }}>
+                          {v.name}
+                        </span>
+                        <span style={{
+                          fontFamily:"var(--font-m)", fontSize:12, flexShrink:0,
+                          color: v.pct >= 100 ? "var(--forest-light)" : "var(--ink-muted)",
+                          fontWeight: v.pct >= 100 ? 600 : 400
+                        }}>
+                          {v.hours}h / {GOAL}h
+                        </span>
+                      </div>
+                      <MiniProgress pct={v.pct} />
+                      <div style={{
+                        display:"flex", alignItems:"center",
+                        justifyContent:"space-between", marginTop:6
+                      }}>
+                        <GradeBadge grade={v.grade} />
+                        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                          <span style={{ fontSize:11, color:"var(--ink-faint)", fontFamily:"var(--font-m)" }}>
+                            {v.program || "—"}
+                          </span>
+                          <span style={{ fontSize:11, color:"var(--forest-mid)", fontFamily:"var(--font-m)", fontWeight:600 }}>
+                            Ver detalhes →
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+
+            {selectedVol && (
+              <DetailModal
+                volunteer={selectedVol}
+                sessions={sessions}
+                onClose={() => setSelectedVol(null)}
+              />
+            )}
+          )}
+        </div>
+      );
+    }
+
+    function LogHoursTab({ volunteers, sessions, setSessions }) {
+      const today = new Date().toISOString().split("T")[0];
+      const [form, setForm] = useState({
+        volunteerId:"", date:today, hours:"", activity:"", notes:""
+      });
+      const [loading, setLoading] = useState(false);
+      const [success, setSuccess] = useState(false);
+      const [error, setError] = useState("");
+
+      const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+      const handleSubmit = async () => {
+        if (!form.volunteerId) return setError("Selecciona um voluntário.");
+        if (!form.date)        return setError("Indica a data da sessão.");
+        const hrs = parseFloat(form.hours);
+        if (!form.hours || isNaN(hrs) || hrs <= 0)
+          return setError("Indica um número de horas válido (ex: 1.5).");
+
+        setLoading(true); setError("");
+        const updated = [...sessions, {
+          id: genId(), volunteerId: form.volunteerId,
+          date: form.date, hours: hrs,
+          activity: form.activity, notes: form.notes.trim()
+        }];
+        await saveDoc("sessions", updated);
+        setSessions(updated);
+        setSuccess(true);
+        setForm(f => ({ ...f, volunteerId:"", hours:"", notes:"" }));
+        setTimeout(() => setSuccess(false), 3500);
+        setLoading(false);
+      };
+
+      return (
+        <div className="fade-in">
+          <Card>
+            <h3 style={{
+              fontFamily:"var(--font-d)", fontSize:19, fontWeight:600,
+              color:"var(--ink)", marginBottom:22
+            }}>Registar sessão</h3>
+
+            <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+              <Field label="Voluntário">
+                <select
+                  value={form.volunteerId}
+                  onChange={e => { set("volunteerId", e.target.value); setError(""); }}
+                  style={{
+                    ...inputStyle(false), appearance:"none",
+                    backgroundImage:`url("data:image/svg+xml,%3Csvg width='11' height='7' viewBox='0 0 11 7' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4.5 4.5L10 1' stroke='%236b5c42' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
+                    backgroundRepeat:"no-repeat",
+                    backgroundPosition:"right 14px center",
+                    paddingRight:36,
+                    color: form.volunteerId ? "var(--ink)" : "var(--ink-faint)"
+                  }}
+                >
+                  <option value="">Selecciona um voluntário...</option>
+                  {GRADES.map(g => (
+                    <optgroup key={g} label={g}>
+                      {volunteers.filter(v => v.grade === g)
+                        .sort((a,b) => a.name.localeCompare(b.name))
+                        .map(v => (
+                          <option key={v.id} value={v.id}>{v.name} ({v.program || "—"})</option>
+                        ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </Field>
+
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                <Field label="Data">
+                  <input type="date" value={form.date} style={inputStyle(false)}
+                    onChange={e => { set("date", e.target.value); setError(""); }} />
+                </Field>
+                <Field label="Horas">
+                  <input type="number" value={form.hours} min="0.5" max="8" step="0.5"
+                    placeholder="Ex: 1.5" style={inputStyle(false)}
+                    onChange={e => { set("hours", e.target.value); setError(""); }} />
+                </Field>
+              </div>
+
+              <Field label="Actividade">
+                <input
+                  type="text"
+                  value={form.activity}
+                  placeholder="Descreve a actividade realizada..."
+                  style={inputStyle(false)}
+                  onChange={e => set("activity", e.target.value)}
+                />
+              </Field>
+
+              <Field label="Notas (opcional)">
+                <textarea
+                  value={form.notes} rows={3}
+                  placeholder="Observações sobre a sessão..."
+                  style={{ ...inputStyle(false), resize:"vertical" }}
+                  onChange={e => set("notes", e.target.value)}
+                />
+              </Field>
+
+              {error   && <Alert type="error">{error}</Alert>}
+              {success && <Alert type="success">Sessão registada com sucesso.</Alert>}
+
+              <Btn variant="primary" onClick={handleSubmit} loading={loading}
+                style={{ width:"100%", padding:"12px", fontSize:15 }}>
+                Registar sessão
+              </Btn>
+            </div>
+          </Card>
+        </div>
+      );
+    }
+
+    function MembersTab({ volunteers, setVolunteers, sessions, setSessions }) {
+      const [form, setForm] = useState({ name:"", grade:GRADES[0], program:"" });
+      const [loading, setLoading] = useState(false);
+      const [error, setError] = useState("");
+      const [confirmDel, setConfirmDel] = useState(null);
+      const [gradeFilter, setGradeFilter] = useState("");
+
+      const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+      const handleAdd = async () => {
+        if (!form.name.trim())    return setError("Indica o nome completo.");
+        if (!form.program.trim()) return setError("Indica o nome do programa.");
+        setLoading(true); setError("");
+        const updated = [...volunteers, {
+          id: genId(), name: form.name.trim(),
+          grade: form.grade, program: form.program.trim()
+        }];
+        await saveDoc("volunteers", updated);
+        setVolunteers(updated);
+        setForm({ name:"", grade:GRADES[0], number:"" });
+        setLoading(false);
+      };
+
+      const handleDelete = async (v) => {
+        const updV = volunteers.filter(x => x.id !== v.id);
+        const updS = sessions.filter(x => x.volunteerId !== v.id);
+        await saveDoc("volunteers", updV);
+        await saveDoc("sessions", updS);
+        setVolunteers(updV);
+        setSessions(updS);
+        setConfirmDel(null);
+      };
+
+      const filtered = useMemo(() =>
+        (gradeFilter ? volunteers.filter(v => v.grade === gradeFilter) : volunteers)
+          .slice().sort((a, b) => a.name.localeCompare(b.name))
+      , [volunteers, gradeFilter]);
+
+      return (
+        <div className="fade-in" style={{ display:"flex", flexDirection:"column", gap:20 }}>
+          <Card>
+            <h3 style={{
+              fontFamily:"var(--font-d)", fontSize:19, fontWeight:600, marginBottom:22
+            }}>Adicionar voluntário</h3>
+            <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+              <Field label="Nome completo" error={error && form.name === "" ? error : ""}>
+                <input type="text" value={form.name} placeholder="Nome do voluntário"
+                  style={inputStyle(!!error && !form.name.trim())}
+                  onChange={e => { set("name", e.target.value); setError(""); }} />
+              </Field>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                <Field label="Ano">
+                  <div style={{ display:"flex", gap:8 }}>
+                    {GRADES.map(g => (
+                      <button key={g} onClick={() => set("grade", g)} style={{
+                        flex:1, padding:"9px 6px", borderRadius:"var(--r)",
+                        border:`1px solid ${form.grade === g ? "var(--forest)" : "var(--border)"}`,
+                        background: form.grade === g ? "var(--forest)" : "transparent",
+                        color: form.grade === g ? "#fff" : "var(--ink-muted)",
+                        cursor:"pointer", fontSize:12,
+                        fontFamily:"var(--font-m)", fontWeight:500,
+                        transition:"all .15s"
+                      }}>{g}</button>
+                    ))}
+                  </div>
+                </Field>
+                <Field label="Programa">
+                  <input type="text" value={form.program} placeholder="Ex: Leitura Viva"
+                    style={inputStyle(!!error && !form.program.trim())}
+                    onChange={e => { set("program", e.target.value); setError(""); }} />
+                </Field>
+              </div>
+              {error && <Alert type="error">{error}</Alert>}
+              <Btn variant="primary" onClick={handleAdd} loading={loading}
+                style={{ width:"100%", padding:"11px" }}>
+                Adicionar voluntário
+              </Btn>
+            </div>
+          </Card>
+
+          <div>
+            <div style={{
+              display:"flex", alignItems:"center",
+              justifyContent:"space-between", marginBottom:12
+            }}>
+              <span style={{ fontFamily:"var(--font-m)", fontSize:12, color:"var(--ink-muted)" }}>
+                {filtered.length} voluntário{filtered.length !== 1 ? "s" : ""}
+              </span>
+              <GradeFilter value={gradeFilter} onChange={setGradeFilter} />
+            </div>
+
+            {filtered.length === 0 ? (
+              <Card style={{ textAlign:"center", padding:"44px" }}>
+                <p style={{ color:"var(--ink-muted)", fontStyle:"italic" }}>
+                  Nenhum voluntário inscrito ainda.
+                </p>
+              </Card>
+            ) : (
+              <div style={{ display:"flex", flexDirection:"column", gap:7 }}>
+                {filtered.map(v => {
+                  const vHours = sessions
+                    .filter(s => s.volunteerId === v.id)
+                    .reduce((a, b) => a + (b.hours || 0), 0);
+                  return (
+                    <Card key={v.id} style={{ padding:"12px 16px" }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                        <Avatar name={v.name} size={38} />
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ fontWeight:600, fontSize:14 }}>{v.name}</div>
+                          <div style={{
+                            display:"flex", alignItems:"center", gap:8,
+                            fontSize:12, color:"var(--ink-muted)",
+                            fontFamily:"var(--font-m)", marginTop:3
+                          }}>
+                            <span>{v.program || "—"}</span>
+                            <span aria-hidden="true">·</span>
+                            <GradeBadge grade={v.grade} />
+                            <span aria-hidden="true">·</span>
+                            <span style={{ color: vHours >= GOAL ? "var(--forest-light)" : "var(--ink-muted)" }}>
+                              {vHours}h
+                            </span>
+                          </div>
+                        </div>
+                        <button onClick={() => setConfirmDel(v)} style={{
+                          background:"none", border:"none", cursor:"pointer",
+                          color:"var(--ink-faint)", padding:"6px 8px",
+                          borderRadius:"var(--r)", fontSize:18, lineHeight:1,
+                          transition:"color .15s, background .15s"
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.color = "var(--red)"; e.currentTarget.style.background = "var(--red-pale)"; }}
+                        onMouseLeave={e => { e.currentTarget.style.color = "var(--ink-faint)"; e.currentTarget.style.background = "none"; }}
+                        aria-label={`Apagar ${v.name}`}>
+                          ×
+                        </button>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {confirmDel && (
+            <ConfirmModal
+              message={`Apagar ${confirmDel.name}?`}
+              detail="Todas as sessões deste voluntário serão removidas permanentemente."
+              onConfirm={() => handleDelete(confirmDel)}
+              onCancel={() => setConfirmDel(null)}
+            />
+          )}
+        </div>
+      );
+    }
+
+    function Dashboard({ volunteers, setVolunteers, sessions, setSessions, onLogout }) {
+      const [tab, setTab] = useState("overview");
+      const TABS = [
+        { id:"overview", label:"Visão geral" },
+        { id:"log",      label:"Registar horas" },
+        { id:"members",  label:"Membros" },
+      ];
+      return (
+        <div style={{ minHeight:"100vh", background:"var(--cream)" }}>
+          {/* Top bar */}
+          <div style={{
+            background:"var(--surface)", borderBottom:"1px solid var(--border-light)",
+            padding:"0 24px", position:"sticky", top:0, zIndex:100
+          }}>
+            <div style={{
+              maxWidth:740, margin:"0 auto",
+              display:"flex", alignItems:"center", justifyContent:"space-between",
+              height:58
+            }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                <div style={{
+                  width:30, height:30, borderRadius:"50%",
+                  background:"var(--forest)",
+                  display:"flex", alignItems:"center", justifyContent:"center"
+                }}>
+                  <svg width="14" height="14" viewBox="0 0 28 28" fill="none">
+                    <path d="M6 4h9a3 3 0 013 3v14l-6-3.5L6 21V4z" fill="white" opacity=".95"/>
+                    <path d="M12 4h6a2 2 0 012 2v16l-4.5-2.8L12 22V4z" fill="white" opacity=".45"/>
+                  </svg>
+                </div>
+                <span style={{
+                  fontFamily:"var(--font-d)", fontWeight:700,
+                  fontSize:15, color:"var(--ink)"
+                }}>Livros são Portas</span>
+              </div>
+              <button onClick={onLogout} style={{
+                background:"none", border:"none", cursor:"pointer",
+                color:"var(--ink-muted)", fontSize:12,
+                fontFamily:"var(--font-m)", letterSpacing:"0.05em",
+                padding:"6px 10px", borderRadius:"var(--r)",
+                transition:"color .15s, background .15s"
+              }}
+              onMouseEnter={e => { e.currentTarget.style.color = "var(--ink)"; e.currentTarget.style.background = "var(--cream-2)"; }}
+              onMouseLeave={e => { e.currentTarget.style.color = "var(--ink-muted)"; e.currentTarget.style.background = "none"; }}>
+                Sair
+              </button>
+            </div>
+
+            {/* Tabs */}
+            <div style={{ maxWidth:740, margin:"0 auto", display:"flex" }}>
+              {TABS.map(t => (
+                <button key={t.id} onClick={() => setTab(t.id)} style={{
+                  padding:"11px 18px", background:"none", border:"none",
+                  cursor:"pointer", fontSize:13,
+                  fontFamily:"var(--font-b)", fontWeight: tab === t.id ? 600 : 400,
+                  color: tab === t.id ? "var(--forest)" : "var(--ink-muted)",
+                  borderBottom:`2px solid ${tab === t.id ? "var(--forest)" : "transparent"}`,
+                  transition:"all .18s"
+                }}>{t.label}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* Content */}
+          <div style={{ maxWidth:740, margin:"0 auto", padding:"24px 24px 48px" }}>
+            {tab === "overview" && (
+              <OverviewTab volunteers={volunteers} sessions={sessions} />
+            )}
+            {tab === "log" && (
+              <LogHoursTab
+                volunteers={volunteers}
+                sessions={sessions}
+                setSessions={setSessions}
+              />
+            )}
+            {tab === "members" && (
+              <MembersTab
+                volunteers={volunteers} setVolunteers={setVolunteers}
+                sessions={sessions}    setSessions={setSessions}
+              />
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    /* ── Volunteer Profile ────────────────────────────────── */
+
+    function VolunteerProfileScreen({ volunteer, sessions, onBack }) {
+      const mine = useMemo(() =>
+        sessions
+          .filter(s => s.volunteerId === volunteer.id)
+          .sort((a, b) => new Date(b.date) - new Date(a.date))
+      , [sessions, volunteer.id]);
+
+      const hours     = mine.reduce((a, b) => a + (b.hours || 0), 0);
+      const pct       = (hours / GOAL) * 100;
+      const remaining = Math.max(GOAL - hours, 0);
+      const avg       = mine.length > 0 ? (hours / mine.length).toFixed(1) : null;
+
+      return (
+        <div style={{ minHeight:"100vh", background:"var(--cream)" }}>
+          {/* Profile header */}
+          <div style={{
+            background:"var(--surface)", borderBottom:"1px solid var(--border-light)",
+            padding:"16px 24px 0"
+          }}>
+            <div style={{ maxWidth:580, margin:"0 auto" }}>
+              <BackBtn onClick={onBack} />
+              <div style={{ display:"flex", alignItems:"flex-end", gap:16, paddingBottom:22 }}>
+                <Avatar name={volunteer.name} size={56} />
+                <div>
+                  <h1 style={{
+                    fontFamily:"var(--font-d)", fontSize:26,
+                    fontWeight:700, color:"var(--ink)", lineHeight:1.2
+                  }}>{volunteer.name}</h1>
+                  <div style={{ display:"flex", alignItems:"center", gap:10, marginTop:7 }}>
+                    <GradeBadge grade={volunteer.grade} />
+                    <span style={{
+                      fontSize:12, color:"var(--ink-muted)", fontFamily:"var(--font-m)"
+                    }}>{volunteer.program || "—"}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ maxWidth:580, margin:"0 auto", padding:"24px 24px 48px" }}>
+            {/* Progress card */}
+            <Card style={{ marginBottom:20, padding:"26px 24px" }}>
+              <div style={{
+                display:"flex", alignItems:"center",
+                gap:28, flexWrap:"wrap"
+              }}>
+                <BigProgress hours={hours} size={136} />
+                <div style={{ flex:1, minWidth:160 }}>
+                  <div style={{ marginBottom:14 }}>
+                    <MiniProgress pct={pct} />
+                    <p style={{
+                      marginTop:7, fontSize:12, color:"var(--ink-muted)",
+                      fontFamily:"var(--font-m)"
+                    }}>
+                      {Math.round(Math.min(pct,100))}% da meta concluído
+                    </p>
+                  </div>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
+                    {[
+                      { val:`${hours}h`,               label:"completadas" },
+                      { val: remaining === 0 ? "Meta!" : `${remaining}h`,
+                        label: remaining === 0 ? "atingida" : "em falta",
+                        accent: remaining === 0 ? "var(--forest-light)" : "var(--cognac)" },
+                      { val:`${mine.length}`,           label:"sessões" },
+                      { val: avg ? `${avg}h` : "—",     label:"média/sessão" },
+                    ].map((s, i) => (
+                      <div key={i}>
+                        <div style={{
+                          fontSize:20, fontWeight:800, fontFamily:"var(--font-d)",
+                          color: s.accent || "var(--ink-2)", lineHeight:1
+                        }}>{s.val}</div>
+                        <div style={{
+                          fontSize:10, color:"var(--ink-muted)",
+                          fontFamily:"var(--font-m)", letterSpacing:"0.05em",
+                          textTransform:"uppercase", marginTop:3
+                        }}>{s.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {pct >= 100 && (
+                <div style={{
+                  marginTop:20, padding:"12px 16px",
+                  background:"var(--forest-pale)", borderRadius:"var(--r)",
+                  borderLeft:"3px solid var(--forest)",
+                  display:"flex", alignItems:"center", gap:10
+                }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
+                      fill="var(--forest)" opacity=".7"/>
+                  </svg>
+                  <span style={{ fontSize:13, fontWeight:600, color:"var(--forest)" }}>
+                    Meta atingida — parabéns pelo teu compromisso!
+                  </span>
+                </div>
+              )}
+            </Card>
+
+            {/* Session list */}
+            <h3 style={{
+              fontFamily:"var(--font-d)", fontSize:19, fontWeight:600,
+              marginBottom:14, color:"var(--ink)"
+            }}>Historial de sessões</h3>
+
+            {mine.length === 0 ? (
+              <Card style={{ textAlign:"center", padding:"44px" }}>
+                <p style={{ color:"var(--ink-muted)", fontStyle:"italic" }}>
+                  Nenhuma sessão registada ainda.
+                </p>
+              </Card>
+            ) : (
+              <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                {mine.map(s => (
+                  <Card key={s.id} style={{ padding:"14px 16px" }}>
+                    <div style={{
+                      display:"flex", alignItems:"flex-start",
+                      justifyContent:"space-between", gap:12
+                    }}>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontWeight:600, fontSize:14, color:"var(--ink)", marginBottom:3 }}>
+                          {s.activity}
+                        </div>
+                        <div style={{
+                          fontSize:12, color:"var(--ink-muted)",
+                          fontFamily:"var(--font-m)"
+                        }}>{fmtDate(s.date)}</div>
+                        {s.notes && (
+                          <p style={{
+                            fontSize:13, color:"var(--ink-muted)",
+                            marginTop:6, fontStyle:"italic"
+                          }}>{s.notes}</p>
+                        )}
+                      </div>
+                      <span style={{
+                        fontFamily:"var(--font-d)", fontSize:18,
+                        fontWeight:700, color:"var(--forest)", flexShrink:0
+                      }}>{s.hours}h</span>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    /* ── Loading ──────────────────────────────────────────── */
+
+    function LoadingScreen() {
+      return (
+        <div style={{
+          minHeight:"100vh", display:"flex",
+          alignItems:"center", justifyContent:"center",
+          background:"var(--cream)", flexDirection:"column", gap:16
+        }}>
+          <Spinner size={30} />
+          <p style={{
+            color:"var(--ink-muted)", fontFamily:"var(--font-m)",
+            fontSize:11, letterSpacing:"0.12em", textTransform:"uppercase"
+          }}>A carregar...</p>
+        </div>
+      );
+    }
+
+    /* ── App ──────────────────────────────────────────────── */
+
+    function App() {
+      const [screen, setScreen] = useState("home");
+      const [volunteers, setVolunteers] = useState([]);
+      const [sessions, setSessions] = useState([]);
+      const [currentVol, setCurrentVol] = useState(null);
+      const [ready, setReady] = useState(false);
+
+      useEffect(() => {
+        let first = true;
+        const unsubV = subscribe("volunteers", data => {
+          setVolunteers(data);
+          if (first) { setReady(true); first = false; }
+        });
+        const unsubS = subscribe("sessions", data => setSessions(data));
+        return () => { unsubV(); unsubS(); };
+      }, []);
+
+      if (!ready) return <LoadingScreen />;
+
+      return (
+        <>
+          {screen === "home" && (
+            <HomeScreen
+              onCoord={() => setScreen("coord-login")}
+              onVolunteer={() => setScreen("vol-login")}
+            />
+          )}
+          {screen === "coord-login" && (
+            <CoordLoginScreen
+              onSuccess={() => setScreen("dashboard")}
+              onBack={() => setScreen("home")}
+            />
+          )}
+          {screen === "vol-login" && (
+            <VolunteerLoginScreen
+              volunteers={volunteers}
+              onSuccess={v => { setCurrentVol(v); setScreen("profile"); }}
+              onBack={() => setScreen("home")}
+            />
+          )}
+          {screen === "dashboard" && (
+            <Dashboard
+              volunteers={volunteers} setVolunteers={setVolunteers}
+              sessions={sessions}     setSessions={setSessions}
+              onLogout={() => setScreen("home")}
+            />
+          )}
+          {screen === "profile" && currentVol && (
+            <VolunteerProfileScreen
+              volunteer={currentVol}
+              sessions={sessions}
+              onBack={() => setScreen("home")}
+            />
+          )}
+        </>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
